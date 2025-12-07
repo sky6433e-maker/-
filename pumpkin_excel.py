@@ -9,46 +9,40 @@ from io import BytesIO
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- 設定網頁標題 ---
-st.set_page_config(page_title="蔬菜行情趨勢圖", page_icon="🥗", layout="wide")
-st.title("🥗 蔬菜批發市場行情分析")
+st.set_page_config(page_title="南瓜行情分析", page_icon="🎃", layout="wide")
+st.title("🎃 南瓜批發市場行情分析")
 st.write("資料來源：農業部開放資料平台 (官方 API)")
 
-# --- 蔬菜代碼字典 (可自行擴充) ---
-# 格式： "顯示名稱": "代碼"
+# --- 南瓜品種代碼字典 (FT系列) ---
+# 這些是台灣批發市場實際使用的細分類代碼
 vegetable_map = {
-    "🎃 南瓜 (FT1)": "FT1",
-    "🥬 甘藍-高麗菜 (LA1)": "LA1",
-    "🥬 小白菜 (LC1)": "LC1",
-    "🥬 青江白菜 (LD1)": "LD1",
-    "🥬 菠菜 (LH1)": "LH1",
-    "🥦 花椰菜 (FB1)": "FB1",
-    "🥦 青花苔-原本花椰菜 (FD1)": "FD1",
-    "🥒 胡瓜-大黃瓜 (FC1)": "FC1",
-    "🥒 花胡瓜-小黃瓜 (FC2)": "FC2",
-    "🥒 苦瓜 (FG1)": "FG1",
-    "🥒 絲瓜 (FE1)": "FE1",
-    "🍆 茄子 (FI1)": "FI1",
-    "🍅 番茄 (FJ1)": "FJ1",
-    "🌽 甜玉米 (FK4)": "FK4",
-    "🧅 洋蔥 (SE1)": "SE1",
-    "🥕 胡蘿蔔 (SG1)": "SG1",
-    "🥔 馬鈴薯 (SJ2)": "SJ2",
-    "🧄 大蒜 (SD1)": "SD1",
-    "🍄 香菇 (QI1)": "QI1",
-    "🌶️ 辣椒 (FM2)": "FM2",
-    "🫑 甜椒 (FM1)": "FM1"
+    "🎃 南瓜-木瓜形 (FT1) - 最常見": "FT1",
+    "🎃 南瓜-圓形 (FT2)": "FT2",
+    "🎃 南瓜-黃如意 (FT3)": "FT3",
+    "🎃 南瓜-觀賞用 (FT4)": "FT4",
+    "🎃 南瓜-青如意 (FT5)": "FT5",
+    "🎃 南瓜-東昇 (FT6) - 橘皮": "FT6",
+    "🎃 南瓜-栗子 (FT7) - 日本品種": "FT7",
+    "🎃 南瓜-木瓜形(阿成) (FT11)": "FT11",
+    "🎃 南瓜-木瓜形(阿嬌) (FT12)": "FT12",
+    "🎃 南瓜-栗子(小紅) (FT71)": "FT71",
+    "🎃 南瓜-其他 (FT0)": "FT0",
+    # 如果需要進口南瓜，可以解開以下註解
+    # "🚢 進口南瓜-木瓜形 (FT91)": "FT91",
+    # "🚢 進口南瓜-圓形 (FT92)": "FT92",
+    # "🚢 進口南瓜-東昇 (FT96)": "FT96",
+    # "🚢 進口南瓜-栗子 (FT97)": "FT97",
 }
 
 # --- 側邊欄：使用者輸入區 ---
 st.sidebar.header("🔎 查詢設定")
 
-# 1. 作物選擇 (新增功能)
+# 1. 品種選擇
 selected_veg_name = st.sidebar.selectbox(
-    "選擇作物種類",
+    "選擇南瓜品種",
     options=list(vegetable_map.keys()),
-    index=0  # 預設選第一個(南瓜)
+    index=0 
 )
-# 取得代碼
 target_crop_code = vegetable_map[selected_veg_name]
 
 # 2. 日期選擇器
@@ -107,12 +101,11 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
         roc_start = to_roc_date_str(start_date)
         roc_end = to_roc_date_str(end_date)
         
-        # 顯示正在查詢的作物名稱
+        # 顯示正在查詢的作物
         st.info(f"正在查詢【{selected_veg_name}】：{roc_start} 至 {roc_end}，指標：{target_col}...")
         
         api_url = "https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"
         
-        # 使用動態的 CropCode
         params = {
             "CropCode": target_crop_code,
             "StartDate": roc_start,
@@ -146,8 +139,7 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
                         
                         if not df.empty:
                             # --- A. 繪圖 ---
-                            # 標題動態顯示作物名稱
-                            clean_name = selected_veg_name.split(' ')[1] # 取出中文名稱
+                            clean_name = selected_veg_name.split(' ')[1] 
                             st.subheader(f"📊 {clean_name} - 各市場「{target_col}」走勢圖")
                             st.caption("註：線條中斷處代表該日休市或無交易")
                             
@@ -171,19 +163,18 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
                             # --- C. 下載 Excel ---
                             output = BytesIO()
                             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                                final_df.to_excel(writer, index=False, sheet_name='蔬菜行情')
+                                final_df.to_excel(writer, index=False, sheet_name='南瓜行情')
                             output.seek(0)
                             
-                            # 檔名也動態加入代碼
                             file_name = f"{target_crop_code}_{clean_name}_{roc_start.replace('.','')}-{roc_end.replace('.','')}.xlsx"
                             st.download_button("📥 下載 Excel", data=output, file_name=file_name)
                             
                         else:
-                            st.warning(f"篩選後的資料為空 (可能該區間無交易)。")
+                            st.warning(f"篩選後的資料為空 (可能【{clean_name}】在選定市場/日期無交易)。")
                     else:
                         st.error("API 回傳格式異常。")
                 else:
-                    st.warning("查無資料 (API 回傳空值，可能該作物在選定日期無交易)。")
+                    st.warning(f"查無資料 (API 回傳空值)。\n提示：某些特殊品種(如觀賞南瓜)可能交易量極少，請嘗試擴大日期區間或選擇主要市場(台北一、二)。")
             else:
                 st.error(f"連線失敗，代碼：{response.status_code}")
                 
