@@ -2,25 +2,60 @@ import streamlit as st
 import pandas as pd
 import requests
 import urllib3
-import numpy as np # 新增：用來處理「空值」的數學套件
+import numpy as np
 from io import BytesIO
 
 # --- 忽略 SSL 警告 ---
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- 設定網頁標題 ---
-st.set_page_config(page_title="南瓜行情趨勢圖", page_icon="📈", layout="wide")
-st.title("📈 南瓜 (FT1) 行情趨勢分析")
+st.set_page_config(page_title="蔬菜行情趨勢圖", page_icon="🥗", layout="wide")
+st.title("🥗 蔬菜批發市場行情分析")
 st.write("資料來源：農業部開放資料平台 (官方 API)")
+
+# --- 蔬菜代碼字典 (可自行擴充) ---
+# 格式： "顯示名稱": "代碼"
+vegetable_map = {
+    "🎃 南瓜 (FT1)": "FT1",
+    "🥬 甘藍-高麗菜 (LA1)": "LA1",
+    "🥬 小白菜 (LC1)": "LC1",
+    "🥬 青江白菜 (LD1)": "LD1",
+    "🥬 菠菜 (LH1)": "LH1",
+    "🥦 花椰菜 (FB1)": "FB1",
+    "🥦 青花苔-原本花椰菜 (FD1)": "FD1",
+    "🥒 胡瓜-大黃瓜 (FC1)": "FC1",
+    "🥒 花胡瓜-小黃瓜 (FC2)": "FC2",
+    "🥒 苦瓜 (FG1)": "FG1",
+    "🥒 絲瓜 (FE1)": "FE1",
+    "🍆 茄子 (FI1)": "FI1",
+    "🍅 番茄 (FJ1)": "FJ1",
+    "🌽 甜玉米 (FK4)": "FK4",
+    "🧅 洋蔥 (SE1)": "SE1",
+    "🥕 胡蘿蔔 (SG1)": "SG1",
+    "🥔 馬鈴薯 (SJ2)": "SJ2",
+    "🧄 大蒜 (SD1)": "SD1",
+    "🍄 香菇 (QI1)": "QI1",
+    "🌶️ 辣椒 (FM2)": "FM2",
+    "🫑 甜椒 (FM1)": "FM1"
+}
 
 # --- 側邊欄：使用者輸入區 ---
 st.sidebar.header("🔎 查詢設定")
 
-# 1. 日期選擇器
+# 1. 作物選擇 (新增功能)
+selected_veg_name = st.sidebar.selectbox(
+    "選擇作物種類",
+    options=list(vegetable_map.keys()),
+    index=0  # 預設選第一個(南瓜)
+)
+# 取得代碼
+target_crop_code = vegetable_map[selected_veg_name]
+
+# 2. 日期選擇器
 start_date = st.sidebar.date_input("開始日期")
 end_date = st.sidebar.date_input("結束日期")
 
-# 2. 市場選擇
+# 3. 市場選擇
 market_options = [
     "台北一", "台北二", "板橋區", "三重區", "宜蘭市", 
     "桃園區", "台中市", "豐原區", "南投市", "嘉義市", 
@@ -33,7 +68,7 @@ selected_markets = st.sidebar.multiselect(
     default=["台北一", "台北二", "台中市", "高雄市"]
 )
 
-# 3. 價格指標選擇
+# 4. 價格指標選擇
 price_type_mapping = {
     "Avg_Price(number):平均價(元/公斤)": "平均價",
     "Upper_Price(number):上價(元/公斤)": "上價",
@@ -72,11 +107,14 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
         roc_start = to_roc_date_str(start_date)
         roc_end = to_roc_date_str(end_date)
         
-        st.info(f"正在查詢：{roc_start} 至 {roc_end}，指標：{target_col}...")
+        # 顯示正在查詢的作物名稱
+        st.info(f"正在查詢【{selected_veg_name}】：{roc_start} 至 {roc_end}，指標：{target_col}...")
         
         api_url = "https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"
+        
+        # 使用動態的 CropCode
         params = {
-            "CropCode": "FT1",
+            "CropCode": target_crop_code,
             "StartDate": roc_start,
             "EndDate": roc_end,
             "$top": "5000"
@@ -95,15 +133,11 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
                         # 1. 篩選市場
                         df = df[df['市場名稱'].isin(selected_markets)]
                         
-                        # 2. 轉數字並「處理 0 的問題」
+                        # 2. 轉數字並處理 0 -> NaN
                         price_cols = ['上價', '中價', '下價', '平均價']
                         for col in price_cols:
                             if col in df.columns:
-                                # 先強制轉成數字 (非數字變 NaN)
                                 df[col] = pd.to_numeric(df[col], errors='coerce')
-                                
-                                # 【關鍵修改】把 0 變成 NaN (空值)
-                                # 這樣畫圖時線條就會斷開，而不是掉到 0
                                 df[col] = df[col].replace(0, np.nan)
 
                         # 3. 轉日期
@@ -112,24 +146,23 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
                         
                         if not df.empty:
                             # --- A. 繪圖 ---
-                            st.subheader(f"📊 各市場「{target_col}」走勢圖")
-                            st.caption("註：線條中斷處代表該日休市或無交易 (價格為 0)")
+                            # 標題動態顯示作物名稱
+                            clean_name = selected_veg_name.split(' ')[1] # 取出中文名稱
+                            st.subheader(f"📊 {clean_name} - 各市場「{target_col}」走勢圖")
+                            st.caption("註：線條中斷處代表該日休市或無交易")
                             
                             chart_data = df.pivot_table(
                                 index='西元日期', 
                                 columns='市場名稱', 
                                 values=target_col
                             )
-                            # Streamlit 的 line_chart 遇到 NaN 會自動斷開
                             st.line_chart(chart_data)
 
                             # --- B. 顯示表格 ---
-                            st.subheader("📋 詳細數據表")
+                            st.subheader(f"📋 {clean_name} - 詳細數據表")
                             
-                            # 排序
                             df_sorted = df.sort_values(by=['西元日期', '市場名稱'], ascending=[False, True])
                             
-                            # 表格顯示處理：為了美觀，可以把 NaN 再轉回空字串或保留 NaN
                             display_cols = ['交易日期', '市場名稱', '作物名稱', '上價', '中價', '下價', '平均價', '交易量']
                             final_df = df_sorted[display_cols]
                             
@@ -138,18 +171,19 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
                             # --- C. 下載 Excel ---
                             output = BytesIO()
                             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                                final_df.to_excel(writer, index=False, sheet_name='南瓜行情')
+                                final_df.to_excel(writer, index=False, sheet_name='蔬菜行情')
                             output.seek(0)
                             
-                            file_name = f"FT1南瓜_{roc_start.replace('.','')}-{roc_end.replace('.','')}.xlsx"
+                            # 檔名也動態加入代碼
+                            file_name = f"{target_crop_code}_{clean_name}_{roc_start.replace('.','')}-{roc_end.replace('.','')}.xlsx"
                             st.download_button("📥 下載 Excel", data=output, file_name=file_name)
                             
                         else:
-                            st.warning(f"篩選後的資料為空。")
+                            st.warning(f"篩選後的資料為空 (可能該區間無交易)。")
                     else:
                         st.error("API 回傳格式異常。")
                 else:
-                    st.warning("查無資料。")
+                    st.warning("查無資料 (API 回傳空值，可能該作物在選定日期無交易)。")
             else:
                 st.error(f"連線失敗，代碼：{response.status_code}")
                 
