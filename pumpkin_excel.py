@@ -9,29 +9,31 @@ from io import BytesIO
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # --- 設定網頁標題 ---
-st.set_page_config(page_title="南瓜行情分析", page_icon="🎃", layout="wide")
-st.title("🎃 南瓜批發市場行情分析")
+st.set_page_config(page_title="蔬菜行情分析", page_icon="🥗", layout="wide")
+st.title("🥗 蔬菜批發市場行情分析")
 st.write("資料來源：農業部開放資料平台 (官方 API)")
 
-# --- 南瓜品種代碼字典 (FT系列) ---
-# 這些是台灣批發市場實際使用的細分類代碼
+# --- 蔬菜代碼字典 ---
 vegetable_map = {
-    "🎃 南瓜-木瓜形 (FT1) - 最常見": "FT1",
+    "🎃 南瓜-木瓜形 (FT1)": "FT1",
     "🎃 南瓜-圓形 (FT2)": "FT2",
     "🎃 南瓜-黃如意 (FT3)": "FT3",
     "🎃 南瓜-觀賞用 (FT4)": "FT4",
     "🎃 南瓜-青如意 (FT5)": "FT5",
-    "🎃 南瓜-東昇 (FT6) - 橘皮": "FT6",
-    "🎃 南瓜-栗子 (FT7) - 日本品種": "FT7",
-    "🎃 南瓜-木瓜形(阿成) (FT11)": "FT11",
-    "🎃 南瓜-木瓜形(阿嬌) (FT12)": "FT12",
-    "🎃 南瓜-栗子(小紅) (FT71)": "FT71",
+    "🎃 南瓜-東昇 (FT6)": "FT6",
+    "🎃 南瓜-栗子 (FT7)": "FT7",
     "🎃 南瓜-其他 (FT0)": "FT0",
-    # 如果需要進口南瓜，可以解開以下註解
-    # "🚢 進口南瓜-木瓜形 (FT91)": "FT91",
-    # "🚢 進口南瓜-圓形 (FT92)": "FT92",
-    # "🚢 進口南瓜-東昇 (FT96)": "FT96",
-    # "🚢 進口南瓜-栗子 (FT97)": "FT97",
+    "🥬 甘藍-高麗菜 (LA1)": "LA1",
+    "🥬 小白菜 (LC1)": "LC1",
+    "🥬 青江白菜 (LD1)": "LD1",
+    "🥬 菠菜 (LH1)": "LH1",
+    "🥦 花椰菜 (FB1)": "FB1",
+    "🥒 胡瓜-大黃瓜 (FC1)": "FC1",
+    "🥒 花胡瓜-小黃瓜 (FC2)": "FC2",
+    "🍆 茄子 (FI1)": "FI1",
+    "🍅 番茄 (FJ1)": "FJ1",
+    "🌽 甜玉米 (FK4)": "FK4",
+    "🥕 胡蘿蔔 (SG1)": "SG1",
 }
 
 # --- 側邊欄：使用者輸入區 ---
@@ -39,7 +41,7 @@ st.sidebar.header("🔎 查詢設定")
 
 # 1. 品種選擇
 selected_veg_name = st.sidebar.selectbox(
-    "選擇南瓜品種",
+    "選擇作物",
     options=list(vegetable_map.keys()),
     index=0 
 )
@@ -50,32 +52,28 @@ start_date = st.sidebar.date_input("開始日期")
 end_date = st.sidebar.date_input("結束日期")
 
 # 3. 市場選擇
+# 【修正】：加入各種可能的桃園名稱，讓使用者可以多選嘗試
 market_options = [
     "台北一", "台北二", "板橋區", "三重區", "宜蘭市", 
-    "桃園區", "台中市", "豐原區", "南投市", "嘉義市", 
-    "高雄市", "鳳山區", "屏東市", "花蓮市", "台東市"
+    "桃園區", "桃農", "新竹市", "台中市", "豐原區", 
+    "南投市", "西螺鎮", "嘉義市", "高雄市", "鳳山區", 
+    "屏東市", "花蓮市", "台東市"
 ]
 
 selected_markets = st.sidebar.multiselect(
-    "選擇市場 (可多選比價)",
+    "選擇市場 (建議勾選桃園區/桃農)",
     options=market_options,
-    default=["台北一", "台北二", "台中市", "高雄市"]
+    default=["台北一", "台北二", "桃園區"]
 )
 
-# 4. 價格指標選擇
+# 4. 價格指標
 price_type_mapping = {
-    "Avg_Price(number):平均價(元/公斤)": "平均價",
-    "Upper_Price(number):上價(元/公斤)": "上價",
-    "Middle_Price(number):中價(元/公斤)": "中價",
-    "Lower_Price(number):下價(元/公斤)": "下價"
+    "平均價(元/公斤)": "平均價",
+    "上價(元/公斤)": "上價",
+    "中價(元/公斤)": "中價",
+    "下價(元/公斤)": "下價"
 }
-
-selected_price_label = st.sidebar.radio(
-    "選擇價格指標",
-    options=list(price_type_mapping.keys()),
-    index=0
-)
-
+selected_price_label = st.sidebar.radio("選擇指標", list(price_type_mapping.keys()), index=0)
 target_col = price_type_mapping[selected_price_label]
 
 # --- 輔助函式 ---
@@ -94,18 +92,16 @@ def convert_roc_to_ad_datetime(roc_date_str):
         return None
 
 # --- 主程式邏輯 ---
-if st.sidebar.button("🚀 開始查詢與繪圖"):
+if st.sidebar.button("🚀 查詢"):
     if not selected_markets:
         st.error("請至少選擇一個市場！")
     else:
         roc_start = to_roc_date_str(start_date)
         roc_end = to_roc_date_str(end_date)
         
-        # 顯示正在查詢的作物
-        st.info(f"正在查詢【{selected_veg_name}】：{roc_start} 至 {roc_end}，指標：{target_col}...")
+        st.info(f"正在查詢【{selected_veg_name}】...")
         
         api_url = "https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"
-        
         params = {
             "CropCode": target_crop_code,
             "StartDate": roc_start,
@@ -123,60 +119,56 @@ if st.sidebar.button("🚀 開始查詢與繪圖"):
                     df = pd.DataFrame(data_json)
                     
                     if '市場名稱' in df.columns:
+                        # --- 關鍵修正：先顯示所有抓到的市場名稱 ---
+                        # 這樣你就能看到桃園到底是叫「桃園區」還是「桃農」
+                        unique_markets = df['市場名稱'].unique().tolist()
+                        
+                        st.warning(f"📢 系統在 API 資料中發現這些市場：{unique_markets}")
+                        
+                        # 自動比對：如果有抓到資料，但被篩選掉了，提示使用者
+                        missed_markets = [m for m in unique_markets if m not in selected_markets]
+                        if missed_markets:
+                            st.caption(f"💡 還有這些市場有資料，但您沒勾選：{missed_markets}")
+
                         # 1. 篩選市場
                         df = df[df['市場名稱'].isin(selected_markets)]
                         
-                        # 2. 轉數字並處理 0 -> NaN
-                        price_cols = ['上價', '中價', '下價', '平均價']
-                        for col in price_cols:
+                        # 2. 處理數值與日期
+                        for col in ['上價', '中價', '下價', '平均價']:
                             if col in df.columns:
                                 df[col] = pd.to_numeric(df[col], errors='coerce')
                                 df[col] = df[col].replace(0, np.nan)
 
-                        # 3. 轉日期
                         df['西元日期'] = df['交易日期'].apply(convert_roc_to_ad_datetime)
                         df = df.dropna(subset=['西元日期'])
                         
                         if not df.empty:
-                            # --- A. 繪圖 ---
+                            # 繪圖
                             clean_name = selected_veg_name.split(' ')[1] 
-                            st.subheader(f"📊 {clean_name} - 各市場「{target_col}」走勢圖")
-                            st.caption("註：線條中斷處代表該日休市或無交易")
+                            st.subheader(f"📊 {clean_name} - {target_col}走勢")
                             
-                            chart_data = df.pivot_table(
-                                index='西元日期', 
-                                columns='市場名稱', 
-                                values=target_col
-                            )
+                            chart_data = df.pivot_table(index='西元日期', columns='市場名稱', values=target_col)
                             st.line_chart(chart_data)
 
-                            # --- B. 顯示表格 ---
-                            st.subheader(f"📋 {clean_name} - 詳細數據表")
+                            # 表格
+                            st.dataframe(df.sort_values(by=['西元日期', '市場名稱'], ascending=[False, True]))
                             
-                            df_sorted = df.sort_values(by=['西元日期', '市場名稱'], ascending=[False, True])
-                            
-                            display_cols = ['交易日期', '市場名稱', '作物名稱', '上價', '中價', '下價', '平均價', '交易量']
-                            final_df = df_sorted[display_cols]
-                            
-                            st.dataframe(final_df)
-                            
-                            # --- C. 下載 Excel ---
+                            # 下載
                             output = BytesIO()
                             with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-                                final_df.to_excel(writer, index=False, sheet_name='南瓜行情')
+                                df.to_excel(writer, index=False, sheet_name='行情')
                             output.seek(0)
                             
-                            file_name = f"{target_crop_code}_{clean_name}_{roc_start.replace('.','')}-{roc_end.replace('.','')}.xlsx"
+                            file_name = f"{target_crop_code}_{clean_name}.xlsx"
                             st.download_button("📥 下載 Excel", data=output, file_name=file_name)
-                            
                         else:
-                            st.warning(f"篩選後的資料為空 (可能【{clean_name}】在選定市場/日期無交易)。")
+                            st.error(f"篩選後沒有資料。請看上方黃色文字，確認「桃園」在資料庫裡的名字是什麼？")
                     else:
                         st.error("API 回傳格式異常。")
                 else:
-                    st.warning(f"查無資料 (API 回傳空值)。\n提示：某些特殊品種(如觀賞南瓜)可能交易量極少，請嘗試擴大日期區間或選擇主要市場(台北一、二)。")
+                    st.warning("查無資料 (API 回傳空值)。")
             else:
-                st.error(f"連線失敗，代碼：{response.status_code}")
+                st.error(f"連線失敗：{response.status_code}")
                 
         except Exception as e:
-            st.error(f"發生錯誤：{str(e)}")
+            st.error(f"錯誤：{str(e)}")
